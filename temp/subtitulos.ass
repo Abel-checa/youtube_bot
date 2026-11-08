@@ -1,0 +1,17 @@
+[Script Info]
+ScriptType: v4.00+
+PlayResX: 1080
+PlayResY: 1920
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: ShortsDefault,Arial,84,&H0000FFFF,&H00000000,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,10,0,2,80,80,960,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:00.82,ShortsDefault,,0,0,0,,¿SABÍAS QUE EXISTE
+Dialogue: 0,0:00:00.82,0:00:01.48,ShortsDefault,,0,0,0,,UN LUGAR EN
+Dialogue: 0,0:00:01.48,0:00:02.24,ShortsDefault,,0,0,0,,LA TIERRA DONDE
+Dialogue: 0,0:00:02.24,0:00:03.34,ShortsDefault,,0,0,0,,EL TIEMPO PARECE
+Dialogue: 0,0:00:03.34,0:00:04.54,ShortsDefault,,0,0,0,,HABERSE DETENIDO POR
+Dialogue: 0,0:00:04.54,0:00:05.04,ShortsDefault,,0,0,0,,COMPLETO?
