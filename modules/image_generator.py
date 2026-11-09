@@ -1,10 +1,11 @@
 """
 Módulo: modules/image_generator.py
-Propósito: Generación de imágenes 9:16 con eliminación automática
-          de marcas de agua en el borde inferior.
+Propósito: Generación robusta de imágenes verticales (9:16) sin marca de agua
+          usando Gemini Flash Image / motores rápidos sin errores 402.
 """
 
 import os
+import time
 import urllib.parse
 from io import BytesIO
 import requests
@@ -17,18 +18,11 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 
 def clean_watermark(image_bytes: bytes, crop_bottom_px: int = 70) -> Image.Image:
-    """
-    Elimina cualquier marca de agua ubicada en el borde inferior recortando
-    la franja final y reescalando a 1080x1920 con interpolación Lanczos.
-    """
+    """Recorta la franja inferior para eliminar cualquier logo y reescala a 1080x1920."""
     with Image.open(BytesIO(image_bytes)) as img:
         img = img.convert("RGB")
         w, h = img.size
-
-        # Recortar los últimos píxeles inferiores donde se ubica el logo
         cropped = img.crop((0, 0, w, h - crop_bottom_px))
-
-        # Reescalar de nuevo al tamaño exacto de Shorts (1080x1920)
         cleaned = cropped.resize((1080, 1920), Image.Resampling.LANCZOS)
         return cleaned
 
@@ -44,51 +38,58 @@ def generate_scene_image(
 
     enhanced_prompt = (
         f"{prompt}, 9:16 vertical portrait composition, cinematic lighting, "
-        f"hyper-detailed, 8k resolution, atmospheric, clean, no text"
+        f"hyper-detailed, 8k resolution, atmospheric, clean, no text, no watermark"
     )
 
     print(f"[*] Solicitando imagen: '{prompt[:45]}...'")
 
-    # 1. Intento con Google Imagen 3
+    # 1. Intento nativo con Gemini Imagen vía generate_content
     if GEMINI_API_KEY:
         try:
             from google import genai
             from google.genai import types
 
             client = genai.Client(api_key=GEMINI_API_KEY, vertexai=False)
-            result = client.models.generate_images(
-                model="imagen-3.0-generate-002",
-                prompt=enhanced_prompt,
-                config=types.GenerateImagesConfig(
-                    number_of_images=1,
-                    aspect_ratio=aspect_ratio,
-                    output_mime_type="image/jpeg",
-                    person_generation="ALLOW_ADULT",
-                ),
+            
+            # Usar el modelo de imagen presente en tu cuenta
+            response = client.models.generate_content(
+                model="gemini-2.5-flash-image",
+                contents=enhanced_prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="image/jpeg",
+                )
             )
 
-            if result.generated_images:
-                img_bytes = result.generated_images[0].image.image_bytes
-                with open(output_path, "wb") as f:
-                    f.write(img_bytes)
-                print(f"[+] Imagen limpia generada con Google Imagen 3: {output_path}")
-                return output_path
+            for part in response.candidates[0].content.parts:
+                if getattr(part, "inline_data", None) and part.inline_data.data:
+                    with open(output_path, "wb") as f:
+                        f.write(part.inline_data.data)
+                    print(f"[+] Imagen nativa generada con Gemini: {output_path}")
+                    return output_path
 
         except Exception as e:
             print(f"[!] Fallback activado ({e}).")
 
-    # 2. Descarga con motor alternativo y limpieza de marca de agua
+    # 2. Motores alternativos resilientes (sin error 402)
     encoded = urllib.parse.quote(enhanced_prompt)
     seed = os.urandom(2).hex()
-    url = f"https://image.pollinations.ai/prompt/{encoded}?width=1080&height=1920&model=flux&seed={seed}"
 
-    res = requests.get(url, timeout=60)
-    if res.status_code == 200:
-        # Pasa por el filtro de recorte para borrar el logo de pollinations.ai
-        clean_img = clean_watermark(res.content, crop_bottom_px=70)
-        clean_img.save(output_path, format="JPEG", quality=95)
+    # Probamos endpoints que no exigen cuota de pago comercial
+    endpoints = [
+        f"https://image.pollinations.ai/prompt/{encoded}?width=1080&height=1920&model=turbo&seed={seed}",
+        f"https://image.pollinations.ai/prompt/{encoded}?width=1080&height=1920&seed={seed}"
+    ]
 
-        print(f"[+] Imagen sin marca de agua guardada en: {output_path}")
-        return output_path
-    else:
-        raise RuntimeError(f"Fallo al descargar la imagen (HTTP {res.status_code})")
+    for url in endpoints:
+        try:
+            time.sleep(1.5)  # Breve pausa para no saturar peticiones consecutivas
+            res = requests.get(url, timeout=45)
+            if res.status_code == 200 and len(res.content) > 1000:
+                clean_img = clean_watermark(res.content, crop_bottom_px=75)
+                clean_img.save(output_path, format="JPEG", quality=95)
+                print(f"[+] Imagen sin marca de agua guardada en: {output_path}")
+                return output_path
+        except Exception:
+            continue
+
+    raise RuntimeError("No se pudo descargar la imagen de ningún motor disponible.")
